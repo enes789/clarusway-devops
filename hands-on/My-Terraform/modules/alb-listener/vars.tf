@@ -1,0 +1,1 @@
+variable "TARGET_GROUP_ARN" {}

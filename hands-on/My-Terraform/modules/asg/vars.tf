@@ -1,0 +1,1 @@
+variable "LAUNCH_TEMPLATE_ID" {}

@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  This is DevOps module project2. It includes EC2 instance.
+Parameters:
+  WebServerVPC:
+    Description: This is VPC Id of my account
+    Type: AWS::EC2::VPC::Id
+  KeyName:
+    Description: This is options of my key names
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: mykey1
+
+Resources:
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTP and SSH #required
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: web-server-sec-group
+      VpcId: !Ref WebServerVPC
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:   
+      ImageId: ami-09d95fab7fff3776c
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      SecurityGroupIds: 
+        - !Ref WebServerSecGroup
+      Tags: 
+        - Key: Name
+          Value: !Sub Web Server of ${AWS::StackName}
+
+      UserData: 
+        Fn::Base64: 
+          !Sub |
+            #! /bin/bash
+
+            yum update -y
+            amazon-linux-extras install docker -y
+            systemctl start docker
+            systemctl enable docker
+            usermod -a -G docker ec2-user
+            # install docker-compose
+            curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" \
+            -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose
+            cd /home/ec2-user
+            FOLDER="https://raw.githubusercontent.com/enes789/devops-project-2/main"
+            wget $FOLDER/Dockerfile
+            wget $FOLDER/docker-compose.yml
+            wget $FOLDER/bookstore-api.py
+            wget $FOLDER/requirements.txt
+            docker-compose up -d
+
+
+Outputs:
+  WebsiteURL:
+    Description: URL for newly created stack
+    Value: !Sub 
+      - http://${PublicAddress}
+      - PublicAddress: !GetAtt WebServerInstance.PublicDnsName
