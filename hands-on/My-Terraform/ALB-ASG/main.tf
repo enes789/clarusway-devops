@@ -68,6 +68,7 @@ resource "aws_lb_target_group" "tf-target-group" {
   port     = 80
   protocol = "HTTP"
   vpc_id   = "vpc-d962cca4"
+  target_type = "instance"
 }
 
 
@@ -114,9 +115,10 @@ resource "aws_launch_template" "tf-lt" {
 
 resource "aws_autoscaling_group" "tf-asg" {
   availability_zones = ["us-east-1a"]
-  desired_capacity   = 2
+  desired_capacity   = 1
   max_size           = 2
   min_size           = 1
+  target_group_arns = [aws_lb_target_group.tf-target-group.arn]
 
   launch_template {
     id      = aws_launch_template.tf-lt.id
