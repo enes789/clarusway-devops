@@ -6,6 +6,9 @@ Description: >
   and SSH (Port 22) connections from anywhere.
 
 Parameters:
+  WebServerVPC:
+    Description: This is VPC Id of my account
+    Type: AWS::EC2::VPC::Id
   KeyPairName:
     Description: Enter the name of your Key Pair for SSH connections.
     Type: AWS::EC2::KeyPair::KeyName
