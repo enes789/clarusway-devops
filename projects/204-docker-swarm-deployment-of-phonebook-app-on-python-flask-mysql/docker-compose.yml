@@ -1,0 +1,26 @@
+version: '3.7'
+
+services:
+  database:
+    image: mysql:5.7
+    environment: 
+      MYSQL_ROOT_PASSWORD: Clarusway_1
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: Clarusway_1
+      MYSQL_DATABASE: phonebook_db
+    networks:
+        - phonebook_clarusnet
+
+  myapp:
+    image: enes/phonebook-app:latest 
+    depends_on: 
+      - database
+    restart: always
+    ports:
+      - "80:80"
+    networks:
+      - phonebook_clarusnet
+
+networks:
+    phonebook_clarusnet:
+        driver: bridge

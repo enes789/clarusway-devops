@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  This Cloudformation Template creates five Compose enabled Docker Machines on EC2 Instances
+  which are ready for Docker Swarm operations, using the AMI of Clarusway (ami-0858bef4ba3225b69). 
+  The AMI of Clarusway Compose enabled Docker Machine (clarusway-docker-machine-with-compose-amazon-linux-2)
+  is published on North Virginia Region for educational purposes. 
+  Docker Machines will run on Amazon Linux 2 with custom security group 
+  allowing SSH (22), HTTP (80) and TCP(2377, 8080) connections from anywhere.
+  User needs to select appropriate key name when launching the template.
+
+Parameters:
+  KeyPairName:
+    Description: Enter the name of your Key Pair for SSH connections.
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be one of the existing EC2 KeyPair
+
+Resources:
+  EmpoweringRoleforSwarmNodes:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess
+  SwarmNodesEC2Profile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles: #required
+        - !Ref EmpoweringRoleforSwarmNodes
+
+  DockerMachinesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and HTTP for Docker Machines
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 2377
+          ToPort: 2377
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+  GrandMaster:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0858bef4ba3225b69
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref SwarmNodesEC2Profile
+      KeyName: !Ref KeyPairName
+      SecurityGroupIds:
+        - !GetAtt DockerMachinesSecurityGroup.GroupId
+      Tags:                
+        -                        
+          Key: Name
+          Value: !Sub Grand Master of ${AWS::StackName}
+      UserData:
+          Fn::Base64: 
+            !Sub
+              - |
+                # Grand-Master
+                #! /bin/bash
+                yum update -y
+                hostnamectl set-hostname Grand-Master
+                amazon-linux-extras install docker -y
+                systemctl start docker
+                systemctl enable docker
+                usermod -a -G docker ec2-user
+                curl -L "https://github.com/docker/compose/releases/download/1.26.2/docker-compose-$(uname -s)-$(uname -m)" \
+                -o /usr/local/bin/docker-compose
+                chmod +x /usr/local/bin/docker-compose
+                docker swarm init
+                aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                docker service create \
+                  --name=viz \
+                  --publish=8080:8080/tcp \
+                  --constraint=node.role==manager \
+                  --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+                  dockersamples/visualizer
+                yum install git -y
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                ./aws/install
+                yum install amazon-ecr-credential-helper -y
+                mkdir -p /home/ec2-user/.docker
+                cd /home/ec2-user/.docker
+                echo '{"credsStore": "ecr-login"}' > config.json
+                aws ecr create-repository \
+                    --repository-name ${APP_REPO_NAME} \
+                    --image-scanning-configuration scanOnPush=false \
+                    --image-tag-mutability MUTABLE \
+                    --region ${AWS::Region}
+                docker build --force-rm -t "${ECR_REGISTRY}/${APP_REPO_NAME}:latest" ${GITHUB_REPO}
+                docker push "${ECR_REGISTRY}/${APP_REPO_NAME}:latest"
+                mkdir -p /home/ec2-user/phonebook
+                cd /home/ec2-user/phonebook
+                cat << EOF | tee .env
+                ECR_REGISTRY=${ECR_REGISTRY}
+                APP_REPO_NAME=${APP_REPO_NAME}
+                EOF
+                curl -o "docker-compose.yml" -L https://raw.githubusercontent.com/enes789/docker_swarm_project/main/docker-compose.yml
+                curl -o "init-db.py" -L https://raw.githubusercontent.com/enes789/docker_swarm_project/main/phonebook-app.py
+                docker-compose config | docker stack deploy --with-registry-auth -c - phonebook && docker run --network phonebook_clarusnet -v /home/ec2-user/phonebook:/app python:alpine sh -c 'pip install mysql-connector-python &&  python /app/init-db.py'
+              - ECR_REGISTRY: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+                APP_REPO_NAME: clarusway-repo/phonebook-app
+                GITHUB_REPO: https://github.com/enes789/docker_swarm_project.git
+
+  ManagerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData: 
+        ImageId: ami-0858bef4ba3225b69
+        InstanceType: t2.micro
+        IamInstanceProfile: !Ref SwarmNodesEC2Profile
+        KeyName: !Ref KeyPairName
+        SecurityGroupIds:
+          - !GetAtt DockerMachinesSecurityGroup.GroupId
+        Tags:                
+          -                        
+            Key: Name
+            Value: !Sub Manager Node of ${AWS::StackName}
+        UserData:
+          Fn::Base64: 
+            !Sub
+              - |
+                # Manager Nodes
+                #! /bin/bash
+                yum update -y
+                amazon-linux-extras install docker -y
+                systemctl start docker
+                systemctl enable docker
+                usermod -a -G docker ec2-user
+                curl -L "https://github.com/docker/compose/releases/download/1.26.2/docker-compose-$(uname -s)-$(uname -m)" \
+                -o /usr/local/bin/docker-compose
+                chmod +x /usr/local/bin/docker-compose
+                yum install python3 -y
+                pip3 install ec2instanceconnectcli
+                eval "$(mssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  \
+                  --region ${AWS::Region} ${DockerManager1} docker swarm join-token manager | grep -i 'docker')"
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                ./aws/install
+                yum install amazon-ecr-credential-helper -y
+                mkdir -p /home/ec2-user/.docker
+                cd /home/ec2-user/.docker
+                echo '{"credsStore": "ecr-login"}' > config.json
+  
+  WorkerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData: 
+        ImageId: ami-0858bef4ba3225b69
+        InstanceType: t2.micro
+        IamInstanceProfile: !Ref SwarmNodesEC2Profile
+        KeyName: !Ref KeyPairName
+        SecurityGroupIds:
+          - !GetAtt DockerMachinesSecurityGroup.GroupId
+        Tags:                
+          -                        
+            Key: Name
+            Value: !Sub Worker Node of ${AWS::StackName}
+        UserData:
+          Fn::Base64: 
+            !Sub
+              - |
+                # Worker Nodes
+                #! /bin/bash
+                yum update -y
+                amazon-linux-extras install docker -y
+                systemctl start docker
+                systemctl enable docker
+                usermod -a -G docker ec2-user
+                curl -L "https://github.com/docker/compose/releases/download/1.26.2/docker-compose-$(uname -s)-$(uname -m)" \
+                -o /usr/local/bin/docker-compose
+                chmod +x /usr/local/bin/docker-compose
+                yum install python3 -y
+                pip3 install ec2instanceconnectcli
+                eval "$(mssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  \
+                  --region ${AWS::Region} ${DockerManager1} docker swarm join-token worker | grep -i 'docker')"
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                ./aws/install
+                yum install amazon-ecr-credential-helper -y
+                mkdir -p /home/ec2-user/.docker
+                cd /home/ec2-user/.docker
+                echo '{"credsStore": "ecr-login"}' > config.json
+  
+  ManagerNodeASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !GetAZs 
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 200
+      HealthCheckType: instance
+      LaunchTemplate: 
+        LaunchTemplateId: !Ref ManagerLaunchTemplate
+        Version: !GetAtt ManagerLaunchTemplate.LatestVersionNumber
+      MaxSize: 3 #required
+      MinSize: 1 #required
+
+  WorkerNodeASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !GetAZs 
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 200
+      HealthCheckType: instance
+      LaunchTemplate: 
+        LaunchTemplateId: !Ref WorkerLaunchTemplate
+        Version: !GetAtt WorkerLaunchTemplate.LatestVersionNumber
+      MaxSize: 3 #required
+      MinSize: 1 #required    
+
+
+  
+Outputs:
+  GrandMasterDNSName:
+    Description: Phonebook App Website URL
+    Value: !Sub 
+      - ${PublicAddress}
+      - PublicAddress: !GetAtt GrandMaster.PublicDnsName
+  VizAppWebsiteDNSName:
+    Description: Visualization App Website URL
+    Value: !Sub 
+      - ${PublicAddress}
+      - PublicAddress: !GetAtt GrandMaster.PublicDnsName
+  
+  
