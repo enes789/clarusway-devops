@@ -8,19 +8,34 @@ services:
       MYSQL_USER: admin
       MYSQL_PASSWORD: Clarusway_1
       MYSQL_DATABASE: phonebook_db
+    volumes: 
+      - db-data:/var/lib/mysql
     networks:
-        - phonebook_clarusnet
+      - clarusnet
+    configs:
+      source: initialdatabase
+      target: /docker-entrypoint-initdb.d/init.sql
 
-  myapp:
-    image: enes/phonebook-app:latest 
-    depends_on: 
-      - database
-    restart: always
+  app-server:
+    image: 759037523915.dkr.ecr.us-east-1.amazonaws.com/clarusway-repo/phonebook-app:latest
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 2
+        delay: 5s
+        order: start-first
     ports:
       - "80:80"
     networks:
-      - phonebook_clarusnet
+      - clarusnet
 
 networks:
-    phonebook_clarusnet:
-        driver: bridge
+    clarusnet:
+        driver: overlay
+
+volumes: 
+  db-data:
+
+configs:
+  initialdatabase:
+    file: ./init.sql
