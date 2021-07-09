@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result-server-deployment
+  labels:
+    name: result-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: result-server
+  template:
+    metadata:
+      labels:
+        name: result-server
+        app: todoapp
+    spec:
+      containers:
+      - image: enes789/result-server:latest
+        name: result-server
+        env:
+        - name: MYSQL_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-credentials
+              key: password
+        env:
+        - name: MYSQL_DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-credentials
+              key: username
+        - name: MYSQL_DATABASE_DB
+          valueFrom:
+            secretKeyRef:
+              name: mysecret
+              key: dbname
+        - name: MYSQL_DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: servers-config
+              key: MYSQL_DATABASE_HOST
+        ports: 
+        - name: result-server
+          containerPort: 80
+        volumeMounts:
+          - name: mysql-storage
+            mountPath: /data/db
+      volumes:
+        - name: mysql-storage
+          persistentVolumeClaim:
+            claimName: database-persistent-volume-claim
+                      

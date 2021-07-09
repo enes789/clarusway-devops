@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: servers-config
+data:
+  config: |
+    MYSQL_DATABASE_HOST: mysql

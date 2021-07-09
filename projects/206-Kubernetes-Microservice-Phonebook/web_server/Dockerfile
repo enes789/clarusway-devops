@@ -1,6 +1,6 @@
 FROM python:alpine
-COPY ./app /app
+COPY ../Students_files/image_for_web_server /app
 WORKDIR /app
 RUN pip install -r requirements.txt
 EXPOSE 80
-CMD python ./phonebook-app.py
+CMD python app.py

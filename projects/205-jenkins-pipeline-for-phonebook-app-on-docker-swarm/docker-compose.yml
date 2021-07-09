@@ -1,23 +1,23 @@
-version: '3.7'
+version: "3.7"
 
 services:
   database:
     image: mysql:5.7
-    environment: 
-      MYSQL_ROOT_PASSWORD: Clarusway_1
+    environment:
+      MYSQL_ROOT_PASSWORD: P123456p
+      MYSQL_DATABASE: phonebook_db
       MYSQL_USER: admin
       MYSQL_PASSWORD: Clarusway_1
-      MYSQL_DATABASE: phonebook_db
-    volumes: 
+    volumes:
       - db-data:/var/lib/mysql
     networks:
       - clarusnet
     configs:
-      source: initialdatabase
-      target: /docker-entrypoint-initdb.d/init.sql
+      - source: initialdatabase
+        target: /docker-entrypoint-initdb.d/init.sql
 
   app-server:
-    image: 759037523915.dkr.ecr.us-east-1.amazonaws.com/clarusway-repo/phonebook-app:latest
+    image: 046402772087.dkr.ecr.us-east-1.amazonaws.com/clarusway-repo/phonebook-app:latest
     deploy:
       mode: global
       update_config:
@@ -30,12 +30,12 @@ services:
       - clarusnet
 
 networks:
-    clarusnet:
-        driver: overlay
+  clarusnet:
+    driver: overlay
 
-volumes: 
+volumes:
   db-data:
 
 configs:
   initialdatabase:
-    file: ./init.sql
+      file: ./init.sql
