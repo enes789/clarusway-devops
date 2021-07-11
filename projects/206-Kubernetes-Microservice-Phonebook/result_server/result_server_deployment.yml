@@ -3,51 +3,31 @@ kind: Deployment
 metadata:
   name: result-server-deployment
   labels:
-    name: result-server
+    name: result-server-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: result-server
+      name: result-server-pod
   template:
     metadata:
+      name: result-server-pod
       labels:
-        name: result-server
-        app: todoapp
+        name: result-server-pod
     spec:
       containers:
       - image: enes789/result-server:latest
         name: result-server
         env:
-        - name: MYSQL_DATABASE_PASSWORD
+        - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mysql-credentials
-              key: password
-        env:
-        - name: MYSQL_DATABASE_USER
-          valueFrom:
-            secretKeyRef:
-              name: mysql-credentials
-              key: username
-        - name: MYSQL_DATABASE_DB
-          valueFrom:
-            secretKeyRef:
-              name: mysecret
-              key: dbname
-        - name: MYSQL_DATABASE_HOST
-          valueFrom:
-            configMapKeyRef:
-              name: servers-config
-              key: MYSQL_DATABASE_HOST
+              name: mysql-secret
+              key: mysql-admin-password
+        envFrom:
+        - configMapRef:
+            name: servers-configmap
         ports: 
-        - name: result-server
-          containerPort: 80
-        volumeMounts:
-          - name: mysql-storage
-            mountPath: /data/db
-      volumes:
-        - name: mysql-storage
-          persistentVolumeClaim:
-            claimName: database-persistent-volume-claim
+        - containerPort: 80
+
                       

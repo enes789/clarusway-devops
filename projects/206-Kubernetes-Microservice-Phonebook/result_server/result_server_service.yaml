@@ -3,14 +3,13 @@ kind: Service
 metadata:
   name: result-service
   labels:
-    name: result
-    app: todoapp
+    name: result-service
 spec:
   selector:
-    name: result-server 
+    name: result-server-pod
   type: NodePort
   ports:
-   - name: http
-     port: 30002
+   - port: 80
+     nodePort: 30002
      targetPort: 80
-     protocol: TCP
+

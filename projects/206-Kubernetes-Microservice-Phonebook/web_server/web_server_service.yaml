@@ -3,14 +3,12 @@ kind: Service
 metadata:
   name: web-service
   labels:
-    name: web
-    app: todoapp
+    name: web-service
 spec:
   selector:
-    name: web-server
+    name: web-server-pod
   type: NodePort
   ports:
-   - name: http
-     port: 30001
+   - port: 80
+     nodePort: 30001
      targetPort: 80
-     protocol: TCP
