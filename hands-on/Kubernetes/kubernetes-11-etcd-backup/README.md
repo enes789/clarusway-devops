@@ -255,11 +255,15 @@ sudo ETCDCTL_API=3 etcdctl  snapshot restore /opt/snapshot-backup.db \
 
 - Then, we will modify etcd configuration file to use the new data directory. 
 
+- But before that we should take out the manifest file of kube-api server which is named as ```kube-apiserver.yaml```. This file and other three files in the same directory are called static pods and they're created by kubelet service while the cluster is being created. If you want to modify any of these files under ```etc/kubernetes/manifests/``` folder, you should take out the kube-apiserver.yaml file out of this special directory. So that any api request would not be tried to be processed. So take the ```kube-apiserver.yaml``` file out of this directory first, then take out the ```etcd.yaml``` file out of this directory. After that modify etcd.yaml file and put it back to the ```manifests``` folder. Then, at the end put the kube-apiserver.yaml file back into the manifests folder.
+
 ```bash
-sudo vi /etc/kubernetes/manifests/etcd.yaml
+sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml ~/
+sudo mv /etc/kubernetes/manifests/etcd.yaml ~/
+sudo vi ~/etcd.yaml
 ```
 
-- We have restored the etcd snapshot to a new path on the kube20-master - /var/lib/etcd-backup, so, the only change to be made in the YAML file, is to change the hostPath for the volume called etcd-data from the old directory (/var/lib/etcd) to the new directory /var/lib/etcd-backup as below.
+- Modify the files as shown below:
 
 ```yaml
   volumes:
@@ -269,10 +273,36 @@ sudo vi /etc/kubernetes/manifests/etcd.yaml
     name: etcd-data
 ```
 
+- We have restored the etcd snapshot to a new path on the kube20-master - /var/lib/etcd-backup, so, the only change to be made in the YAML file, is to change the hostPath for the volume called etcd-data from the old directory (/var/lib/etcd) to the new directory /var/lib/etcd-backup as below.
+
+```bash
+sudo mv ~/etcd.yaml /etc/kubernetes/manifests/
+sudo mv ~/kube-apiserver.yaml /etc/kubernetes/manifests/ 
+```
+
+- Restart the kubelet service.
+
+```bash
+sudo systemctl restart kubelet
+```
+
 - Wait a while and check the app is running.
 
 ```bash
 kubectl get deploy
 kubectl get svc
 curl localhost:30001
+```
+
+- **NOTE:** If you are using nginx ingress controller and ingress in your application you may need to redeploy the nginx ingress controller and the ingress.
+
+```bash
+
+kubectl delete -f <ingress-service.yaml>
+
+kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.45.0/deploy/static/provider/aws/deploy.yaml
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.45.0/deploy/static/provider/aws/deploy.yaml
+
+kubectl apply -f <ingress-service.yaml>
 ```

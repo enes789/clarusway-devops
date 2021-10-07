@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  This Cloudformation Template creates a Nexus server. 
+  Nexus will run on Amazon Linux 2 EC2 t2 medium Instance with security group allowing SSH connections from anywhere on port 22 and 8081 port for the Nexus web portal.
+Parameters:
+  KeyPairName:
+    Description: Enter the name of your Key Pair for SSH connections.
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must one of the existing EC2 KeyPair
+Resources:
+  NexusMachineSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and 8081
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8081
+          ToPort: 8081
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+  NexusMachine:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0dc2d3e4c0f9ebd18
+      InstanceType: t2.medium
+      KeyName: !Ref KeyPairName
+      SecurityGroupIds:
+        - !GetAtt NexusMachineSecurityGroup.GroupId
+      Tags:                
+        -                        
+          Key: Name
+          Value: !Sub Nexus Machine of ${AWS::StackName}   
+      UserData:
+        Fn::Base64: |
+          #! /bin/bash
+          yum update -y
+          # install Java
+          yum install java-1.8.0-openjdk -y
+          # install maven
+          wget https://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
+          sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
+          cd /opt
+          yum install -y apache-maven
+          # Download and install Nexus
+          wget -O nexus.tar.gz https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+          tar xvzf nexus.tar.gz
+          rm nexus.tar.gz
+          mv nexus-3* nexus
+          # Give the ownership of the directories related to Nexus to the ec2-user
+          chown -R ec2-user:ec2-user /opt/nexus
+          chown -R ec2-user:ec2-user /opt/sonatype-work
+          echo "run_as_user="ec2-user"" > /opt/nexus/bin/nexus.rc 
+          echo '
+          [Unit]
+          Description=nexus service
+          After=network.target
+          [Service]
+          Type=forking
+          LimitNOFILE=65536
+          User=ec2-user
+          Group=ec2-user
+          ExecStart=/opt/nexus/bin/nexus start
+          ExecStop=/opt/nexus/bin/nexus stop
+          User=ec2-user
+          Restart=on-abort
+          [Install]
+          WantedBy=multi-user.target ' >> /etc/systemd/system/nexus.service
+          systemctl daemon-reload
+          systemctl enable nexus.service
+          systemctl start nexus.service
+Outputs:
+  WebsiteURL:
+    Description: Nexus Machine DNS Name
+    Value: !Sub 
+      - http://${PublicAddress}:8081
+      - PublicAddress: !GetAtt NexusMachine.PublicDnsName
+
+
+
+
+
